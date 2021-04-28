@@ -7,7 +7,7 @@ import (
 
 	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
 	"github.com/hashicorp/terraform-plugin-sdk/terraform"
-	"github.com/heimweh/go-pagerduty/pagerduty"
+	"github.com/martindstone/go-pagerduty/pagerduty"
 )
 
 // Provider represents a resource provider in Terraform

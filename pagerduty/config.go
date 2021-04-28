@@ -6,7 +6,7 @@ import (
 	"net/http"
 
 	"github.com/hashicorp/terraform-plugin-sdk/helper/logging"
-	"github.com/heimweh/go-pagerduty/pagerduty"
+	"github.com/martindstone/go-pagerduty/pagerduty"
 )
 
 // Config defines the configuration options for the PagerDuty client
@@ -28,8 +28,14 @@ Please see https://www.terraform.io/docs/providers/pagerduty/index.html
 for more information on providing credentials for this provider.
 `
 
+var client *pagerduty.Client = nil
+
 // Client returns a new PagerDuty client
 func (c *Config) Client() (*pagerduty.Client, error) {
+	if client != nil {
+		return client, nil
+	}
+
 	// Validate that the PagerDuty token is set
 	if c.Token == "" {
 		return nil, fmt.Errorf(invalidCreds)

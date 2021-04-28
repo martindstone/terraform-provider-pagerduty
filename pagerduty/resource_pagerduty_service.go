@@ -9,7 +9,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
 	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
 	"github.com/hashicorp/terraform-plugin-sdk/helper/validation"
-	"github.com/heimweh/go-pagerduty/pagerduty"
+	"github.com/martindstone/go-pagerduty/pagerduty"
 )
 
 func resourcePagerDutyService() *schema.Resource {
