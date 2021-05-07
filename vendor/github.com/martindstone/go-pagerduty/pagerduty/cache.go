@@ -152,6 +152,9 @@ func PopulateCache(c *Client) {
 
 func cacheGetAbilities(v interface{}) error {
 	log.Println("===== Get abilities from cache =====")
+	if !cacheEnabled {
+		return &Error{Message: "Cache is not enabled"}
+	}
 	filter := bson.D{primitive.E{Key: "endpoint", Value: "abilities"}}
 	a := new(CacheAbilitiesRecord)
 	err := miscCollection.FindOne(context.TODO(), filter).Decode(a)
