@@ -291,7 +291,7 @@ github.com/klauspost/compress/huff0
 github.com/klauspost/compress/snappy
 github.com/klauspost/compress/zstd
 github.com/klauspost/compress/zstd/internal/xxhash
-# github.com/martindstone/go-pagerduty/pagerduty v0.0.0-20210507191726-2f8cf383c6f7
+# github.com/martindstone/go-pagerduty/pagerduty v0.0.0-20210519155218-b3974cf7df46
 ## explicit
 github.com/martindstone/go-pagerduty/pagerduty
 # github.com/mattn/go-colorable v0.1.1

@@ -326,6 +326,12 @@ func (s *UserService) CreateNotificationRule(userID string, rule *NotificationRu
 		return nil, nil, err
 	}
 
+	if err = cacheInsertNotificationRule(v.NotificationRule); err != nil {
+		log.Printf("===== Error adding notification rule %q to cache: %q", v.NotificationRule.ID, err)
+	} else {
+		log.Printf("===== Added notification rule %q to cache", v.NotificationRule.ID)
+	}
+
 	return v.NotificationRule, resp, nil
 }
 
@@ -333,6 +339,10 @@ func (s *UserService) CreateNotificationRule(userID string, rule *NotificationRu
 func (s *UserService) GetNotificationRule(userID string, ruleID string) (*NotificationRule, *Response, error) {
 	u := fmt.Sprintf("/users/%s/notification_rules/%s", userID, ruleID)
 	v := new(NotificationRule)
+
+	if err := cacheGetNotificationRule(ruleID, v); err == nil {
+		return v, nil, nil
+	}
 
 	resp, err := s.client.newRequestDo("GET", u, nil, nil, &v)
 	if err != nil {
@@ -352,11 +362,21 @@ func (s *UserService) UpdateNotificationRule(userID, ruleID string, rule *Notifi
 		return nil, nil, err
 	}
 
+	cacheUpdateNotificationRule(v.NotificationRule)
+
 	return v.NotificationRule, resp, nil
 }
 
 // DeleteNotificationRule deletes a notification rule for a user.
 func (s *UserService) DeleteNotificationRule(userID, ruleID string) (*Response, error) {
 	u := fmt.Sprintf("/users/%s/notification_rules/%s", userID, ruleID)
-	return s.client.newRequestDo("DELETE", u, nil, nil, nil)
+	resp, err := s.client.newRequestDo("DELETE", u, nil, nil, nil)
+
+	if cerr := cacheDeleteNotificationRule(ruleID); cerr != nil {
+		log.Printf("===== Error deleting notification rule %q from cache: %q", ruleID, cerr)
+	} else {
+		log.Printf("===== Deleted notification rule %q from cache", ruleID)
+	}
+
+	return resp, err
 }

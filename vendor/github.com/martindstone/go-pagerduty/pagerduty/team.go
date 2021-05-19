@@ -94,6 +94,7 @@ func (s *TeamService) Create(team *Team) (*Team, *Response, error) {
 // Delete removes an existing team.
 func (s *TeamService) Delete(id string) (*Response, error) {
 	u := fmt.Sprintf("/teams/%s", id)
+	cacheInvalidateTeamMembers(id)
 	return s.client.newRequestDo("DELETE", u, nil, nil, nil)
 }
 
@@ -115,6 +116,8 @@ func (s *TeamService) Update(id string, team *Team) (*Team, *Response, error) {
 	u := fmt.Sprintf("/teams/%s", id)
 	v := new(Team)
 
+	cacheInvalidateTeamMembers(id)
+
 	resp, err := s.client.newRequestDo("PUT", u, nil, &Team{Team: team}, &v)
 	if err != nil {
 		return nil, nil, err
@@ -126,12 +129,14 @@ func (s *TeamService) Update(id string, team *Team) (*Team, *Response, error) {
 // RemoveUser removes a user from a team.
 func (s *TeamService) RemoveUser(teamID, userID string) (*Response, error) {
 	u := fmt.Sprintf("/teams/%s/users/%s", teamID, userID)
+	cacheInvalidateTeamMembers(teamID)
 	return s.client.newRequestDo("DELETE", u, nil, nil, nil)
 }
 
 // AddUser adds a user to a team.
 func (s *TeamService) AddUser(teamID, userID string) (*Response, error) {
 	u := fmt.Sprintf("/teams/%s/users/%s", teamID, userID)
+	cacheInvalidateTeamMembers(teamID)
 	return s.client.newRequestDo("PUT", u, nil, nil, nil)
 }
 
@@ -139,13 +144,20 @@ func (s *TeamService) AddUser(teamID, userID string) (*Response, error) {
 func (s *TeamService) AddUserWithRole(teamID, userID string, role string) (*Response, error) {
 	tr := teamRole{Role: role}
 	u := fmt.Sprintf("/teams/%s/users/%s", teamID, userID)
+	cacheInvalidateTeamMembers(teamID)
 	return s.client.newRequestDo("PUT", u, nil, tr, nil)
 }
 
 // GetMembers retrieves information about members on a team.
-func (s *TeamService) GetMembers(teamID string, o *GetMembersOptions) (*GetMembersResponse, *Response, error) {
+func (s *TeamService) GetMembersImpl(teamID string, o *GetMembersOptions, bypassCache bool) (*GetMembersResponse, *Response, error) {
 	u := fmt.Sprintf("/teams/%s/members", teamID)
 	v := new(GetMembersResponse)
+
+	if !bypassCache {
+		if err := cacheGetTeamMembers(teamID, v); err == nil {
+			return v, nil, nil
+		}
+	}
 
 	members := make([]*Member, 0)
 
@@ -172,6 +184,14 @@ func (s *TeamService) GetMembers(teamID string, o *GetMembersOptions) (*GetMembe
 	}
 	v.Members = members
 	return v, nil, nil
+}
+
+func (s *TeamService) GetMembers(teamID string, o *GetMembersOptions) (*GetMembersResponse, *Response, error) {
+	return s.GetMembersImpl(teamID, o, false)
+}
+
+func (s *TeamService) GetMembersBypassCache(teamID string, o *GetMembersOptions) (*GetMembersResponse, *Response, error) {
+	return s.GetMembersImpl(teamID, o, true)
 }
 
 // RemoveEscalationPolicy removes an escalation policy from a team.
