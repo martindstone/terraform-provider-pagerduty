@@ -284,8 +284,8 @@ github.com/kylelemons/godebug v1.1.0 h1:RPNrshWIDI6G2gRW9EHilWtl7Z6Sb1BR0xunSBf0
 github.com/kylelemons/godebug v1.1.0/go.mod h1:9/0rRGxNHcop5bhtWyNeEfOS8JIWk580+fNqagV/RAw=
 github.com/markbates/oncer v0.0.0-20181203154359-bf2de49a0be2/go.mod h1:Ld9puTsIW75CHf65OeIOkyKbteujpZVXDpWK6YGZbxE=
 github.com/markbates/safe v1.0.1/go.mod h1:nAqgmRi7cY2nqMc92/bSEeQA+R4OheNU2T1kNSCBdG0=
-github.com/martindstone/go-pagerduty/pagerduty v0.0.0-20210519155218-b3974cf7df46 h1:42HubMm718O3MsxMracdPPebPF1cRJKJcfJEv+kOx5w=
-github.com/martindstone/go-pagerduty/pagerduty v0.0.0-20210519155218-b3974cf7df46/go.mod h1:w1ueDltGE5lRRu5gAiBVbHBFUVzASwqvE5LqvwSFnlE=
+github.com/martindstone/go-pagerduty/pagerduty v0.0.0-20210520205802-0375a0ee0674 h1:Q3ihT9k4jEJVsl0mrAcVuSJd/5wrdaRlV1kAmR24PsU=
+github.com/martindstone/go-pagerduty/pagerduty v0.0.0-20210520205802-0375a0ee0674/go.mod h1:w1ueDltGE5lRRu5gAiBVbHBFUVzASwqvE5LqvwSFnlE=
 github.com/mattn/go-colorable v0.0.9/go.mod h1:9vuHe8Xs5qXnSaW/c/ABM9alt+Vo+STaOChaDxuIBZU=
 github.com/mattn/go-colorable v0.1.1 h1:G1f5SKeVxmagw/IyvzvtZE4Gybcc4Tr1tf7I8z0XgOg=
 github.com/mattn/go-colorable v0.1.1/go.mod h1:FuOcm+DKB9mbwrcAfNl7/TZVBZ6rcnceauSikq3lYCQ=

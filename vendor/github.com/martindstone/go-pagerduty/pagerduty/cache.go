@@ -133,25 +133,31 @@ func PopulateCache() {
 	}
 
 	usersCollection.Drop(context.TODO())
-	res, err := usersCollection.InsertMany(context.TODO(), users)
-	if err != nil {
-		log.Fatal(err)
+	if len(users) > 0 {
+		res, err := usersCollection.InsertMany(context.TODO(), users)
+		if err != nil {
+			log.Fatal(err)
+		}
+		log.Printf("Inserted %d users", len(res.InsertedIDs))
 	}
-	log.Printf("Inserted %d users", len(res.InsertedIDs))
 
 	contactMethodsCollection.Drop(context.TODO())
-	res, err = contactMethodsCollection.InsertMany(context.TODO(), contactMethods)
-	if err != nil {
-		log.Fatal(err)
+	if len(contactMethods) > 0 {
+		res, err := contactMethodsCollection.InsertMany(context.TODO(), contactMethods)
+		if err != nil {
+			log.Fatal(err)
+		}
+		log.Printf("Inserted %d contact methods", len(res.InsertedIDs))
 	}
-	log.Printf("Inserted %d contact methods", len(res.InsertedIDs))
 
 	notificationRulesCollection.Drop(context.TODO())
-	res, err = notificationRulesCollection.InsertMany(context.TODO(), notificationRules)
-	if err != nil {
-		log.Fatal(err)
+	if len(notificationRules) > 0 {
+		res, err := notificationRulesCollection.InsertMany(context.TODO(), notificationRules)
+		if err != nil {
+			log.Fatal(err)
+		}
+		log.Printf("Inserted %d notification rules", len(res.InsertedIDs))
 	}
-	log.Printf("Inserted %d notification rules", len(res.InsertedIDs))
 
 	teamMembersCollection.Drop(context.TODO())
 
