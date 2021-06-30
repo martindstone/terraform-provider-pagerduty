@@ -3,8 +3,11 @@ package pagerduty
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"os"
+	"strings"
+	"sync"
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson"
@@ -15,47 +18,44 @@ import (
 )
 
 var pdClient *Client
-var cacheEnabled bool = false
-var cacheMongoURL string = ""
+var cacheType string
+var cacheMongoURL string
 var cacheMaxAge, _ = time.ParseDuration("10s")
 
 var mongoClient *mongo.Client
-var usersCollection *mongo.Collection
-var contactMethodsCollection *mongo.Collection
-var notificationRulesCollection *mongo.Collection
-var teamMembersCollection *mongo.Collection
-var miscCollection *mongo.Collection
+
+var mongoCache map[string]*mongo.Collection
+
+var memoryCache = map[string]*sync.Map{
+	"users":              {},
+	"contact_methods":    {},
+	"notification_rules": {},
+	"misc":               {},
+}
 
 type CacheAbilitiesRecord struct {
-	Endpoint  string
+	ID        string
 	Abilities *ListAbilitiesResponse
 }
 
 type CacheLastRefreshRecord struct {
-	Endpoint  string
+	ID        string
 	Users     time.Time
 	Abilities time.Time
 }
 
-type CacheTeamMembersRecord struct {
-	ID      string
-	Members *GetMembersResponse
-}
-
 func InitCache(c *Client) {
 	pdClient = c
-	if cacheMongoURL = os.Getenv("TF_PAGERDUTY_CACHE"); cacheMongoURL == "" {
+	if cacheMongoURL = os.Getenv("TF_PAGERDUTY_CACHE"); strings.HasPrefix(cacheMongoURL, "mongodb://") {
+		log.Printf("===== Enabling PagerDuty Mongo cache at %v", cacheMongoURL)
+		cacheType = "mongo"
+	} else if cacheMongoURL == "memory" {
+		log.Println("===== Enabling PagerDuty memory cache =====")
+		cacheType = "memory"
+		return
+	} else {
 		log.Println("===== PagerDuty Cache Skipping Init =====")
 		return
-	}
-
-	if os.Getenv("TF_PAGERDUTY_CACHE_MAX_AGE") != "" {
-		d, err := time.ParseDuration(os.Getenv("TF_PAGERDUTY_CACHE_MAX_AGE"))
-		if err != nil {
-			log.Printf("===== PagerDuty Cache couldn't parse max age %q, using the default =====", os.Getenv("TF_PAGERDUTY_CACHE_MAX_AGE"))
-		} else {
-			cacheMaxAge = d
-		}
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -65,28 +65,43 @@ func InitCache(c *Client) {
 	ctx, cancel = context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 	err := mongoClient.Ping(ctx, readpref.Primary())
-	if err == nil {
-		cacheEnabled = true
-		log.Println("===== Enabling PagerDuty Cache =====")
-	} else {
-		cacheEnabled = false
-		log.Printf("===== PagerDuty Cache couldn't connect to MongoDB at %q =====", cacheMongoURL)
-	}
-
-	usersCollection = mongoClient.Database("pagerduty").Collection("users")
-	contactMethodsCollection = mongoClient.Database("pagerduty").Collection("contact_methods")
-	notificationRulesCollection = mongoClient.Database("pagerduty").Collection("notification_rules")
-	teamMembersCollection = mongoClient.Database("pagerduty").Collection("team_members")
-	miscCollection = mongoClient.Database("pagerduty").Collection("misc")
-}
-
-func PopulateCache() {
-	if !cacheEnabled {
+	if err != nil {
+		log.Printf("===== PagerDuty Cache couldn't connect to MongoDB at %q, disabling cache =====", cacheMongoURL)
+		cacheType = ""
 		return
 	}
-	filter := bson.D{primitive.E{Key: "endpoint", Value: "lastrefresh"}}
+
+	if os.Getenv("TF_PAGERDUTY_CACHE_MAX_AGE") != "" {
+		d, err := time.ParseDuration(os.Getenv("TF_PAGERDUTY_CACHE_MAX_AGE"))
+		if err != nil {
+			log.Printf("===== PagerDuty Cache couldn't parse max age %q, using the default %v =====", os.Getenv("TF_PAGERDUTY_CACHE_MAX_AGE"), cacheMaxAge)
+		} else {
+			cacheMaxAge = d
+		}
+	}
+
+	mongoCache = map[string]*mongo.Collection{
+		"users":              mongoClient.Database("pagerduty").Collection("users"),
+		"contact_methods":    mongoClient.Database("pagerduty").Collection("contact_methods"),
+		"notification_rules": mongoClient.Database("pagerduty").Collection("notification_rules"),
+		"misc":               mongoClient.Database("pagerduty").Collection("misc"),
+	}
+}
+
+func PopulateMemoryCache() {
+	abilities, _, _ := pdClient.Abilities.List()
+
+	abilitiesRecord := &CacheAbilitiesRecord{
+		ID:        "abilities",
+		Abilities: abilities,
+	}
+	cachePut("misc", "abilities", abilitiesRecord)
+}
+
+func PopulateMongoCache() {
+	filter := bson.D{primitive.E{Key: "ID", Value: "lastrefresh"}}
 	lastRefreshRecord := new(CacheLastRefreshRecord)
-	err := miscCollection.FindOne(context.TODO(), filter).Decode(lastRefreshRecord)
+	err := mongoCache["misc"].FindOne(context.TODO(), filter).Decode(lastRefreshRecord)
 	if err == nil {
 		if time.Since(lastRefreshRecord.Users) < cacheMaxAge {
 			log.Printf("===== PagerDuty cache was refreshed at %s, not refreshing =====", lastRefreshRecord.Users.Format(time.RFC3339))
@@ -128,326 +143,272 @@ func PopulateCache() {
 	abilities, _, _ := pdClient.Abilities.List()
 
 	abilitiesRecord := &CacheAbilitiesRecord{
-		Endpoint:  "abilities",
+		ID:        "abilities",
 		Abilities: abilities,
 	}
 
-	usersCollection.Drop(context.TODO())
+	mongoCache["users"].Drop(context.TODO())
 	if len(users) > 0 {
-		res, err := usersCollection.InsertMany(context.TODO(), users)
+		res, err := mongoCache["users"].InsertMany(context.TODO(), users)
 		if err != nil {
 			log.Fatal(err)
 		}
 		log.Printf("Inserted %d users", len(res.InsertedIDs))
 	}
 
-	contactMethodsCollection.Drop(context.TODO())
+	mongoCache["contact_methods"].Drop(context.TODO())
 	if len(contactMethods) > 0 {
-		res, err := contactMethodsCollection.InsertMany(context.TODO(), contactMethods)
+		res, err := mongoCache["contact_methods"].InsertMany(context.TODO(), contactMethods)
 		if err != nil {
 			log.Fatal(err)
 		}
 		log.Printf("Inserted %d contact methods", len(res.InsertedIDs))
 	}
 
-	notificationRulesCollection.Drop(context.TODO())
+	mongoCache["notification_rules"].Drop(context.TODO())
 	if len(notificationRules) > 0 {
-		res, err := notificationRulesCollection.InsertMany(context.TODO(), notificationRules)
+		res, err := mongoCache["notification_rules"].InsertMany(context.TODO(), notificationRules)
 		if err != nil {
 			log.Fatal(err)
 		}
 		log.Printf("Inserted %d notification rules", len(res.InsertedIDs))
 	}
 
-	teamMembersCollection.Drop(context.TODO())
-
-	miscCollection.Drop(context.TODO())
-	ares, err := miscCollection.InsertOne(context.TODO(), &abilitiesRecord)
+	mongoCache["misc"].Drop(context.TODO())
+	ares, err := mongoCache["misc"].InsertOne(context.TODO(), &abilitiesRecord)
 	log.Println(ares)
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	cacheLastRefreshRecord := &CacheLastRefreshRecord{
-		Endpoint:  "lastrefresh",
+		ID:        "lastrefresh",
 		Users:     time.Now(),
 		Abilities: time.Now(),
 	}
-	cres, err := miscCollection.InsertOne(context.TODO(), &cacheLastRefreshRecord)
+	cres, err := mongoCache["misc"].InsertOne(context.TODO(), &cacheLastRefreshRecord)
 	log.Println(cres)
 	if err != nil {
 		log.Fatal(err)
 	}
 }
 
-func cacheGetAbilities(v interface{}) error {
-	log.Println("===== Get abilities from cache =====")
-	if !cacheEnabled {
-		return &Error{Message: "Cache is not enabled"}
+func PopulateCache() {
+	if cacheType == "mongo" {
+		PopulateMongoCache()
+	} else if cacheType == "memory" {
+		PopulateMemoryCache()
 	}
-	filter := bson.D{primitive.E{Key: "endpoint", Value: "abilities"}}
-	a := new(CacheAbilitiesRecord)
-	err := miscCollection.FindOne(context.TODO(), filter).Decode(a)
-	if err != nil {
-		log.Println(err)
-		return err
-	}
-	b, _ := json.Marshal(a.Abilities)
-	_ = json.Unmarshal(b, v)
-	log.Println("===== Got abilities from cache =====")
-	return nil
 }
 
-func cacheInsertUser(u *User) error {
-	if !cacheEnabled {
-		return &Error{Message: "Cache is not enabled"}
-	}
-
-	res, err := usersCollection.InsertOne(context.TODO(), &u)
+func getFullUserToCache(id string, v interface{}) error {
+	fu, _, err := pdClient.Users.GetFull(id)
 	if err != nil {
-		log.Printf("===== cacheInsertUser error: %q", err)
+		log.Printf("===== getFullUserToCache: Error getting user %v from PD: %v", id, err)
 		return err
 	}
-	log.Printf("===== cacheInsertUser %+v", res)
-	return nil
-}
 
-func cacheGetUser(id string, v interface{}) error {
-	if !cacheEnabled {
-		return &Error{Message: "Cache is not enabled"}
-	}
-	filter := bson.D{primitive.E{Key: "id", Value: id}}
-	r := usersCollection.FindOne(context.TODO(), filter)
-	err := r.Decode(v)
-
+	u := new(User)
+	b, _ := json.Marshal(fu)
+	json.Unmarshal(b, u)
+	json.Unmarshal(b, v)
+	err = cachePutUser(u)
 	if err != nil {
-		log.Println(err)
+		log.Printf("===== getFullUserToCache: Error putting user %v to cache: %v", id, err)
 		return err
-	}
-	log.Printf("===== Got user %q from cache =====", id)
-	return nil
-}
-
-func cacheUpdateUser(u *User) error {
-	if !cacheEnabled {
-		return &Error{Message: "Cache is not enabled"}
-	}
-
-	filter := bson.D{primitive.E{Key: "id", Value: u.ID}}
-	opts := options.Replace().SetUpsert(true)
-	res, err := usersCollection.ReplaceOne(context.TODO(), filter, &u, opts)
-	if err != nil {
-		log.Printf("===== Error updating user: %q", err)
-		return err
-	}
-	if res.MatchedCount != 0 {
-		log.Println("===== replaced an existing user")
-		return nil
-	}
-	if res.UpsertedCount != 0 {
-		log.Printf("===== inserted a new user with ID %v\n", res.UpsertedID)
-	}
-	return nil
-}
-
-func cacheDeleteUser(id string) error {
-	if !cacheEnabled {
-		return &Error{Message: "Cache is not enabled"}
-	}
-
-	filter := bson.D{primitive.E{Key: "id", Value: id}}
-	res, err := usersCollection.DeleteOne(context.TODO(), filter)
-	if err != nil {
-		log.Printf("===== cacheDeleteUser error: %q", err)
-		return err
-	}
-	log.Printf("===== cacheDeleteUser %+v", res)
-	return nil
-}
-
-func cacheInsertContactMethod(cm *ContactMethod) error {
-	if !cacheEnabled {
-		return &Error{Message: "Cache is not enabled"}
-	}
-
-	res, err := contactMethodsCollection.InsertOne(context.TODO(), &cm)
-	if err != nil {
-		log.Printf("===== cacheInsertContactMethod error: %q", err)
-		return err
-	}
-	log.Printf("===== cacheInsertContactMethod %+v", res)
-	return nil
-}
-
-func cacheGetContactMethod(id string, v interface{}) error {
-	if !cacheEnabled {
-		return &Error{Message: "Cache is not enabled"}
-	}
-	log.Printf("===== Get contact method %q from cache", id)
-	filter := bson.D{primitive.E{Key: "id", Value: id}}
-	r := contactMethodsCollection.FindOne(context.TODO(), filter)
-	err := r.Decode(v)
-
-	if err != nil {
-		log.Printf("===== nope")
-		return err
-	}
-	log.Printf("===== Got contact method")
-	return nil
-}
-
-func cacheUpdateContactMethod(cm *ContactMethod) error {
-	if !cacheEnabled {
-		return &Error{Message: "Cache is not enabled"}
-	}
-
-	filter := bson.D{primitive.E{Key: "id", Value: cm.ID}}
-	opts := options.Replace().SetUpsert(true)
-	res, err := contactMethodsCollection.ReplaceOne(context.TODO(), filter, &cm, opts)
-	if err != nil {
-		log.Printf("===== Error updating contact method: %q", err)
-		return err
-	}
-	if res.MatchedCount != 0 {
-		log.Println("===== replaced an existing contact method")
-		return nil
-	}
-	if res.UpsertedCount != 0 {
-		log.Printf("===== inserted a new contact method with ID %v\n", res.UpsertedID)
-	}
-	return nil
-}
-
-func cacheDeleteContactMethod(id string) error {
-	if !cacheEnabled {
-		return &Error{Message: "Cache is not enabled"}
-	}
-
-	filter := bson.D{primitive.E{Key: "id", Value: id}}
-	res, err := contactMethodsCollection.DeleteOne(context.TODO(), filter)
-	if err != nil {
-		log.Printf("===== cacheDeleteContactMethod error: %q", err)
-		return err
-	}
-	log.Printf("===== cacheDeleteContactMethod %+v", res)
-	return nil
-}
-
-func cacheInsertNotificationRule(rule *NotificationRule) error {
-	if !cacheEnabled {
-		return &Error{Message: "Cache is not enabled"}
-	}
-
-	res, err := notificationRulesCollection.InsertOne(context.TODO(), &rule)
-	if err != nil {
-		log.Printf("===== cacheInsertNotificationRule error: %q", err)
-		return err
-	}
-	log.Printf("===== cacheInsertNotificationRule %+v", res)
-	return nil
-}
-
-func cacheGetNotificationRule(id string, v interface{}) error {
-	if !cacheEnabled {
-		log.Printf("Get notification rule from cache, but it's not enabled")
-		return &Error{Message: "Cache is not enabled"}
-	}
-	log.Printf("==== find notification rule %q", id)
-	filter := bson.D{primitive.E{Key: "id", Value: id}}
-	r := notificationRulesCollection.FindOne(context.TODO(), filter)
-	err := r.Decode(v)
-
-	if err != nil {
-		log.Printf("===== not found")
-		return err
-	}
-	log.Printf("===== got notification rule from cache")
-	return nil
-}
-
-func cacheUpdateNotificationRule(rule *NotificationRule) error {
-	if !cacheEnabled {
-		return &Error{Message: "Cache is not enabled"}
-	}
-
-	filter := bson.D{primitive.E{Key: "id", Value: rule.ID}}
-	opts := options.Replace().SetUpsert(true)
-	res, err := notificationRulesCollection.ReplaceOne(context.TODO(), filter, &rule, opts)
-	if err != nil {
-		log.Printf("===== Error updating notification rule: %q", err)
-		return err
-	}
-	if res.MatchedCount != 0 {
-		log.Println("===== replaced an existing notification rule")
-		return nil
-	}
-	if res.UpsertedCount != 0 {
-		log.Printf("===== inserted a new notification rule with ID %v\n", res.UpsertedID)
-	}
-	return nil
-}
-
-func cacheDeleteNotificationRule(id string) error {
-	if !cacheEnabled {
-		return &Error{Message: "Cache is not enabled"}
-	}
-
-	filter := bson.D{primitive.E{Key: "id", Value: id}}
-	res, err := notificationRulesCollection.DeleteOne(context.TODO(), filter)
-	if err != nil {
-		log.Printf("===== cacheDeleteNotificationRule error: %q", err)
-		return err
-	}
-	log.Printf("===== cacheDeleteNotificationRule %+v", res)
-	return nil
-}
-
-func cacheGetTeamMembers(id string, v interface{}) error {
-	if !cacheEnabled {
-		log.Printf("Get team members from cache, but it's not enabled")
-		return &Error{Message: "Cache is not enabled"}
-	}
-	log.Printf("==== find members of team %q", id)
-	filter := bson.D{primitive.E{Key: "id", Value: id}}
-	r := teamMembersCollection.FindOne(context.TODO(), filter)
-	m := new(CacheTeamMembersRecord)
-	err := r.Decode(m)
-
-	if err == nil {
-		log.Printf("===== got team members from cache")
-		b, _ := json.Marshal(m.Members)
-		json.Unmarshal(b, v)
-		return nil
-	}
-	log.Printf("===== not found")
-
-	members, _, err := pdClient.Teams.GetMembersBypassCache(id, nil)
-	if err != nil {
-		return err
-	}
-	res, err := teamMembersCollection.InsertOne(context.TODO(), &CacheTeamMembersRecord{ID: id, Members: members})
-	if err != nil {
-		log.Printf("===== Error inserting team membership record: %q", err)
 	} else {
-		log.Printf("===== Inserted team members record: %q", res)
+		log.Printf("===== getFullUserToCache: Put user %v to cache", id)
 	}
-	b, _ := json.Marshal(members)
+
+	for _, c := range fu.ContactMethods {
+		err = cachePutContactMethod(c)
+		if err != nil {
+			log.Printf("===== getFullUserToCache: Error putting contact method %v to cache: %v", id, err)
+			return err
+		} else {
+			log.Printf("===== getFullUserToCache: Put contact method %v to cache", id)
+		}
+	}
+
+	for _, r := range fu.NotificationRules {
+		err = cachePutNotificationRule(r)
+		if err != nil {
+			log.Printf("===== getFullUserToCache: Error putting notification rule %v to cache: %v", id, err)
+			return err
+		} else {
+			log.Printf("===== getFullUserToCache: Put notification rule %v to cache", id)
+		}
+	}
+	return nil
+}
+
+func memoryCacheGet(collection_name string, id string, v interface{}) error {
+	log.Printf("===== memoryCacheGet %v from %v", id, collection_name)
+	if collection, ok := memoryCache[collection_name]; ok {
+		if item, ok := collection.Load(id); ok {
+			err := json.Unmarshal(item.([]byte), v)
+			if err != nil {
+				log.Printf("===== memoryCacheGet Error unmarshaling JSON getting %v from %q: %v", id, collection_name, err)
+				return err
+			}
+			log.Printf("===== memoryCacheGet Got %v from %q cache", id, collection_name)
+			return nil
+		} else if collection_name == "users" {
+			// special case for filling users into memory cache on demand
+			return getFullUserToCache(id, v)
+		} else {
+			return fmt.Errorf("memoryCacheGet Item %q is not in %q hash", id, collection_name)
+		}
+	} else {
+		return fmt.Errorf("memoryCacheGet No such collection: %q", collection_name)
+	}
+}
+
+func mongoCacheGet(collection_name string, id string, v interface{}) error {
+	if collection, ok := mongoCache[collection_name]; ok {
+		filter := bson.D{primitive.E{Key: "id", Value: id}}
+		r := collection.FindOne(context.TODO(), filter)
+		err := r.Decode(v)
+		if err != nil {
+			return err
+		}
+		return nil
+	} else {
+		return fmt.Errorf("mongoCacheGet No such collection: %q", collection_name)
+	}
+}
+
+func cacheGet(collection_name string, id string, v interface{}) error {
+	if cacheType == "mongo" {
+		return mongoCacheGet(collection_name, id, v)
+	} else if cacheType == "memory" {
+		return memoryCacheGet(collection_name, id, v)
+	} else {
+		return fmt.Errorf("cacheGet Cache is not enabled")
+	}
+}
+
+func mongoCachePut(collection_name string, id string, v interface{}) error {
+	if collection, ok := mongoCache[collection_name]; ok {
+		filter := bson.D{primitive.E{Key: "id", Value: id}}
+		opts := options.Replace().SetUpsert(true)
+		res, err := collection.ReplaceOne(context.TODO(), filter, &v, opts)
+		if err != nil {
+			log.Printf("===== Error updating %v: %q", collection_name, err)
+			return err
+		}
+		if res.MatchedCount != 0 {
+			log.Printf("===== replaced an existing item %q in %v cache", id, collection_name)
+			return nil
+		}
+		if res.UpsertedCount != 0 {
+			log.Printf("===== inserted a new item %q in %v cache", id, collection_name)
+		}
+		return nil
+	} else {
+		return fmt.Errorf("no such collection %q", collection_name)
+	}
+}
+
+func memoryCachePut(collection_name string, id string, v interface{}) error {
+	if collection, ok := memoryCache[collection_name]; ok {
+		b, _ := json.Marshal(v)
+		collection.Store(id, b)
+		return nil
+	} else {
+		return fmt.Errorf("no such collection: %q", collection_name)
+	}
+}
+
+func cachePut(collection_name string, id string, v interface{}) error {
+	if cacheType == "mongo" {
+		return mongoCachePut(collection_name, id, v)
+	} else if cacheType == "memory" {
+		return memoryCachePut(collection_name, id, v)
+	} else {
+		return fmt.Errorf("cachePut Cache is not enabled")
+	}
+}
+
+func mongoCacheDelete(collection_name string, id string) error {
+	if collection, ok := mongoCache[collection_name]; ok {
+		filter := bson.D{primitive.E{Key: "id", Value: id}}
+		_, err := collection.DeleteOne(context.TODO(), filter)
+		if err != nil {
+			log.Printf("===== mongoCacheDelete mongo error: %q", err)
+			return err
+		}
+		log.Printf("===== mongoCacheDetele deleted item %v from %q", id, collection_name)
+		return nil
+	} else {
+		return fmt.Errorf("mongoCacheDelete No such collection %q", collection_name)
+	}
+}
+
+func memoryCacheDelete(collection_name string, id string) error {
+	if collection, ok := memoryCache[collection_name]; ok {
+		collection.Delete(id)
+		log.Printf("===== memoryCacheDelete deleted item %v from %q", id, collection_name)
+		return nil
+	} else {
+		return fmt.Errorf("memoryCacheDelete No such collection: %q", collection_name)
+	}
+}
+
+func cacheDelete(collection_name string, id string) error {
+	if cacheType == "mongo" {
+		return mongoCacheDelete(collection_name, id)
+	} else if cacheType == "memory" {
+		return memoryCacheDelete(collection_name, id)
+	} else {
+		return fmt.Errorf("cacheDelete Cache is not enabled")
+	}
+}
+
+func cacheGetAbilities(v interface{}) error {
+	r := new(CacheAbilitiesRecord)
+	err := cacheGet("misc", "abilities", r)
+	if err != nil {
+		log.Printf("===== cacheGetAbilities error: %+v", err)
+		return err
+	}
+	b, _ := json.Marshal(r)
 	json.Unmarshal(b, v)
 	return nil
 }
 
-func cacheInvalidateTeamMembers(id string) error {
-	if !cacheEnabled {
-		return &Error{Message: "Cache is not enabled"}
-	}
-	log.Printf("==== Invalidate team membership record for team %q", id)
+func cacheGetUser(id string, v interface{}) error {
+	return cacheGet("users", id, v)
+}
 
-	filter := bson.D{primitive.E{Key: "id", Value: id}}
-	res, err := teamMembersCollection.DeleteOne(context.TODO(), filter)
-	if err != nil {
-		log.Printf("===== Error deleting team membership record: %q", err)
-	} else {
-		log.Printf("===== Deleted team members record: %q", res)
-	}
-	return nil
+func cachePutUser(u *User) error {
+	return cachePut("users", u.ID, u)
+}
+
+func cacheDeleteUser(id string) error {
+	return cacheDelete("users", id)
+}
+
+func cacheGetContactMethod(id string, v interface{}) error {
+	return cacheGet("contact_methods", id, v)
+}
+
+func cachePutContactMethod(c *ContactMethod) error {
+	return cachePut("contact_methods", c.ID, c)
+}
+
+func cacheDeleteContactMethod(id string) error {
+	return cacheDelete("contact_methods", id)
+}
+
+func cacheGetNotificationRule(id string, v interface{}) error {
+	return cacheGet("notification_rules", id, v)
+}
+
+func cachePutNotificationRule(r *NotificationRule) error {
+	return cachePut("notification_rules", r.ID, r)
+}
+
+func cacheDeleteNotificationRule(id string) error {
+	return cacheDelete("notification_rules", id)
 }

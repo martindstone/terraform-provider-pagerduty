@@ -1,8 +1,6 @@
 package pagerduty
 
-import (
-	"fmt"
-)
+import "fmt"
 
 // AbilityService handles the communication with ability related methods
 // of the PagerDuty API.

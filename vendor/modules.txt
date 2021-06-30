@@ -90,6 +90,7 @@ github.com/google/go-cmp/cmp/internal/flags
 github.com/google/go-cmp/cmp/internal/function
 github.com/google/go-cmp/cmp/internal/value
 # github.com/google/go-querystring v1.1.0
+## explicit
 github.com/google/go-querystring/query
 # github.com/google/uuid v1.1.2
 github.com/google/uuid
@@ -209,7 +210,7 @@ github.com/klauspost/compress/huff0
 github.com/klauspost/compress/snappy
 github.com/klauspost/compress/zstd
 github.com/klauspost/compress/zstd/internal/xxhash
-# github.com/martindstone/go-pagerduty/pagerduty v0.0.0-20210524133252-72ad0fddc1c5
+# github.com/martindstone/go-pagerduty v0.0.0-20210630181148-ee572ca1f421
 ## explicit
 github.com/martindstone/go-pagerduty/pagerduty
 # github.com/mattn/go-colorable v0.1.1
@@ -271,7 +272,8 @@ github.com/zclconf/go-cty/cty/msgpack
 github.com/zclconf/go-cty/cty/set
 # github.com/zclconf/go-cty-yaml v1.0.1
 github.com/zclconf/go-cty-yaml
-# go.mongodb.org/mongo-driver v1.5.1
+# go.mongodb.org/mongo-driver v1.5.3
+## explicit
 go.mongodb.org/mongo-driver/bson
 go.mongodb.org/mongo-driver/bson/bsoncodec
 go.mongodb.org/mongo-driver/bson/bsonoptions

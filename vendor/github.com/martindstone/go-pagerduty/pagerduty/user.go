@@ -44,7 +44,7 @@ type User struct {
 	User              *User                     `json:"user,omitempty"`
 }
 
-// User represents a user.
+// FullUser represents a user fetched with include[]=contact_methods,notification_rules.
 type FullUser struct {
 	AvatarURL         string              `json:"avatar_url,omitempty"`
 	Color             string              `json:"color,omitempty"`
@@ -183,7 +183,7 @@ func (s *UserService) Create(user *User) (*User, *Response, error) {
 		return nil, nil, err
 	}
 
-	if err = cacheInsertUser(v.User); err != nil {
+	if err = cachePutUser(v.User); err != nil {
 		log.Printf("===== Error adding user %q to cache: %q", v.User.ID, err)
 	} else {
 		log.Printf("===== Added user %q to cache", v.User.ID)
@@ -223,6 +223,21 @@ func (s *UserService) Get(id string, o *GetUserOptions) (*User, *Response, error
 	return v.User, resp, nil
 }
 
+func (s *UserService) GetFull(id string) (*FullUser, *Response, error) {
+	u := fmt.Sprintf("/users/%s", id)
+	v := new(FullUser)
+	o := &GetUserOptions{
+		Include: []string{"contact_methods", "notification_rules"},
+	}
+
+	resp, err := s.client.newRequestDo("GET", u, o, nil, v)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return v.User, resp, nil
+}
+
 // Update updates an existing user.
 func (s *UserService) Update(id string, user *User) (*User, *Response, error) {
 	u := fmt.Sprintf("/users/%s", id)
@@ -233,7 +248,7 @@ func (s *UserService) Update(id string, user *User) (*User, *Response, error) {
 		return nil, nil, err
 	}
 
-	cacheUpdateUser(v.User)
+	cachePutUser(v.User)
 
 	return v.User, resp, nil
 }
@@ -261,7 +276,7 @@ func (s *UserService) CreateContactMethod(userID string, contactMethod *ContactM
 		return nil, nil, err
 	}
 
-	if err = cacheInsertContactMethod(v.ContactMethod); err != nil {
+	if err = cachePutContactMethod(v.ContactMethod); err != nil {
 		log.Printf("===== Error adding contact method %q to cache: %q", v.ContactMethod.ID, err)
 	} else {
 		log.Printf("===== Added contact method %q to cache", v.ContactMethod.ID)
@@ -297,7 +312,7 @@ func (s *UserService) UpdateContactMethod(userID, contactMethodID string, contac
 		return nil, nil, err
 	}
 
-	cacheUpdateContactMethod(v.ContactMethod)
+	cachePutContactMethod(v.ContactMethod)
 
 	return v.ContactMethod, resp, nil
 }
@@ -326,7 +341,7 @@ func (s *UserService) CreateNotificationRule(userID string, rule *NotificationRu
 		return nil, nil, err
 	}
 
-	if err = cacheInsertNotificationRule(v.NotificationRule); err != nil {
+	if err = cachePutNotificationRule(v.NotificationRule); err != nil {
 		log.Printf("===== Error adding notification rule %q to cache: %q", v.NotificationRule.ID, err)
 	} else {
 		log.Printf("===== Added notification rule %q to cache", v.NotificationRule.ID)
@@ -362,7 +377,7 @@ func (s *UserService) UpdateNotificationRule(userID, ruleID string, rule *Notifi
 		return nil, nil, err
 	}
 
-	cacheUpdateNotificationRule(v.NotificationRule)
+	cachePutNotificationRule(v.NotificationRule)
 
 	return v.NotificationRule, resp, nil
 }
