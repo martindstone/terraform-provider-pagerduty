@@ -1,3 +1,60 @@
+## 2.0.0 (October 11, 2021)
+FEATURES:
+* `resource/pagerduty_tag`: Added resource to manage Tags ([#402](https://github.com/PagerDuty/terraform-provider-pagerduty/pull/402))
+
+* `resource/pagerduty_tag_assignment`: Added resource to manage Tag Assignments ([#402](https://github.com/PagerDuty/terraform-provider-pagerduty/pull/402))
+
+* `data_source_pagerduty_tag`: Added data source for Tags ([#402](https://github.com/PagerDuty/terraform-provider-pagerduty/pull/402))
+
+* Update Terraform Plugin SDK to v2 ([#375](https://github.com/PagerDuty/terraform-provider-pagerduty/pull/375))
+
+
+IMPROVEMENTS:
+* `resource/pagerduty_service_integration`: Added validation that ensures an email address is specified for email integrations ([#382](https://github.com/PagerDuty/terraform-provider-pagerduty/pull/382))
+
+* `resource/pagerduty_schedule`: Added validation for `start_time_of_day` format ([#383](https://github.com/PagerDuty/terraform-provider-pagerduty/pull/383))
+
+* `resource/pagerduty_schedule`: Added validation for `start_day_of_week` format ([#385](https://github.com/PagerDuty/terraform-provider-pagerduty/pull/385))
+
+* `resource/pagerduty_schedule`: Added validation that `start_day_of_week` is only set when `weekly_restriction` is set as `restriction.type` ([#386](https://github.com/PagerDuty/terraform-provider-pagerduty/pull/386))
+
+
+* `resource/pagerduty_service`: CustomizeDiff to ensure general urgency rule is not set for an urgency rule of type support hours ([#387](https://github.com/PagerDuty/terraform-provider-pagerduty/pull/387))
+
+* Docs: `resource/pagerduty_rulset_rule`: Update severity order to reflect criticality ([#392](https://github.com/PagerDuty/terraform-provider-pagerduty/pull/392))
+
+* `resource/pagerduty_escalation_policy`: Added validation to ensure `num_loops` stays between `0` and `9` ([#395](https://github.com/PagerDuty/terraform-provider-pagerduty/pull/395))
+
+* `resource/pagerduty_escalation_policy`: Added validation to ensure `escalation_delay_in_minutes` is an int and greater than `0` ([#401](https://github.com/PagerDuty/terraform-provider-pagerduty/pull/401))
+
+* `resource/pagerduty_schedule`: Added validation to `rotation_turn_length_seconds` ([#405](https://github.com/PagerDuty/terraform-provider-pagerduty/pull/405))
+
+
+
+BUG FIXES:
+* Docs: `resource/pagerduty_service`: Corrected `acknowledgement_timeout` to add statement about default being set to 1800.  ([#393](https://github.com/PagerDuty/terraform-provider-pagerduty/pull/393))
+
+* `resource/pagerduty_service` and `resource/pagerduty_service_dependency`: Fix `alert_grouping` and `alert_grouping_timeout` conflicting with `alert_grouping_parameters` ([#377](https://github.com/PagerDuty/terraform-provider-pagerduty/pull/377))
+
+* `resource/pagerduty_service_dependency`: Fix sporadic panic when processing service dependencies ([#376](https://github.com/PagerDuty/terraform-provider-pagerduty/pull/376))
+
+## 1.11.0 (September 9, 2021)
+FEATURES:
+* `resource/pagerduty_slack_connection`: Added resource to manage Slack Connections (aka Slack v2) ([#381](https://github.com/PagerDuty/terraform-provider-pagerduty/pull/381))
+
+BUG FIXES:
+* `resource/pagerduty_service`: Clarified docs surrounding the `scheduled_actions` block on the service resource ([#360](https://github.com/PagerDuty/terraform-provider-pagerduty/pull/360))
+
+## 1.10.1 (August 16, 2021)
+FEATURES:
+* `data_source_pagerduty_service_integration`: Add new data source for Service Integrations ([#363](https://github.com/PagerDuty/terraform-provider-pagerduty/pull/363))
+* `resource/pagerduty_schedule`: Add `teams` field to schedule resource ([#368](https://github.com/PagerDuty/terraform-provider-pagerduty/pull/368))
+
+BUG FIXES:
+* `resource/pagerduty_extension_servicenow`: Fixed blank `snow_password` when changes ignored ([#371](https://github.com/PagerDuty/terraform-provider-pagerduty/pull/371))
+* `data_source_pagerduty_business_service`: Fixed bug where any business service can now be a data source ([#372](https://github.com/PagerDuty/terraform-provider-pagerduty/pull/372))
+* Various Resources: Updated links to API reference throughout documentation ([#369](https://github.com/PagerDuty/terraform-provider-pagerduty/pull/369))
+
 ## 1.10.0 (July 29, 2021)
 FEATURES:
 * `resource/pagerduty_extension_servicenow`: Added `pagerduty_extension_servicenow` resource to account for specific values that need to be set for ServiceNow extension ([#348](https://github.com/PagerDuty/terraform-provider-pagerduty/pull/348))

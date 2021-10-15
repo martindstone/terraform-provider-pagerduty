@@ -6,15 +6,15 @@ import (
 	"log"
 	"time"
 
-	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
-	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
-	"github.com/hashicorp/terraform-plugin-sdk/helper/validation"
+	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/resource"
+	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/validation"
 	"github.com/heimweh/go-pagerduty/pagerduty"
 )
 
 type PagerDutyExtensionServiceNowConfig struct {
 	User        string `json:"snow_user"`
-	Password    string `json:"snow_password"`
+	Password    string `json:"snow_password,omitempty"`
 	SyncOptions string `json:"sync_options"`
 	Target      string `json:"target"`
 	TaskType    string `json:"task_type"`
@@ -69,6 +69,11 @@ func resourcePagerDutyExtensionServiceNow() *schema.Resource {
 				Type:      schema.TypeString,
 				Required:  true,
 				Sensitive: true,
+			},
+			"summary": {
+				Type:     schema.TypeString,
+				Optional: true,
+				Computed: true,
 			},
 			"sync_options": {
 				Type:         schema.TypeString,
@@ -157,7 +162,7 @@ func resourcePagerDutyExtensionServiceNowRead(d *schema.ResourceData, meta inter
 		if err := d.Set("extension_objects", flattenExtensionServiceNowObjects(extension.ExtensionObjects)); err != nil {
 			log.Printf("[WARN] error setting extension_objects: %s", err)
 		}
-		d.Set("extension_schema", extension.ExtensionSchema)
+		d.Set("extension_schema", extension.ExtensionSchema.ID)
 
 		b, _ := json.Marshal(extension.Config)
 		var config = new(PagerDutyExtensionServiceNowConfig)

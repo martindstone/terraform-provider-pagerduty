@@ -8,7 +8,7 @@ description: |-
 
 # pagerduty\_extension\_servicenow
 
-A special case for [extension](https://v2.developer.pagerduty.com/v2/page/api-reference#!/Extensions/post_extensions) for ServiceNow.
+A special case for [extension](https://developer.pagerduty.com/api-reference/reference/REST/openapiv3.json/paths/~1extensions/post) for ServiceNow.
 
 ## Example Usage
 
@@ -64,12 +64,14 @@ The following arguments are supported:
   * `name` - (Optional) The name of the service extension.
   * `extension_schema` - (Required) This is the schema for this extension.
   * `extension_objects` - (Required) This is the objects for which the extension applies (An array of service ids).
-    * `snow_user` - (Required) The ServiceNow username.
-    * `snow_password` - (Required) The ServiceNow password.
-    * `sync_options` - (Required) The ServiceNow sync option.
-    * `target` - (Required) Target Webhook URL
-    * `task_type` - (Required) The ServiceNow task type, typically `incident`.
-    * `referer` - (Required) The ServiceNow referer.
+  * `snow_user` - (Required) The ServiceNow username.
+  * `snow_password` - (Required) The ServiceNow password.
+  * `summary`- A short-form, server-generated string that provides succinct, important information about an object suitable for primary labeling of an entity in a client. In many cases, this will be identical to `name`, though it is not intended to be an identifier.
+  * `sync_options` - (Required) The ServiceNow sync option.
+  * `target` - (Required) Target Webhook URL
+  * `task_type` - (Required) The ServiceNow task type, typically `incident`.
+  * `referer` - (Required) The ServiceNow referer.
+
 ## Attributes Reference
 
 The following attributes are exported:

@@ -4,9 +4,9 @@ go 1.16
 
 require (
 	cloud.google.com/go v0.71.0 // indirect
+	github.com/heimweh/go-pagerduty v0.0.0-20210930203304-530eff2acdc6
 	github.com/google/go-querystring v1.0.0 // indirect
-	github.com/hashicorp/terraform-plugin-sdk v1.7.0
-	github.com/heimweh/go-pagerduty v0.0.0-20210810155842-7de939d717c0
+	github.com/hashicorp/terraform-plugin-sdk/v2 v2.7.1
 	go.mongodb.org/mongo-driver v1.7.0 // indirect
 	golang.org/x/tools v0.0.0-20201110124207-079ba7bd75cd // indirect
 	google.golang.org/api v0.35.0 // indirect
