@@ -44,46 +44,15 @@ func resourcePagerDutyTeamMembership() *schema.Resource {
 		},
 	}
 }
-func resourcePagerDutyTeamMembershipCreate(d *schema.ResourceData, meta interface{}) error {
-	client := meta.(*pagerduty.Client)
 
-	userID := d.Get("user_id").(string)
-	teamID := d.Get("team_id").(string)
-	role := d.Get("role").(string)
-
-	log.Printf("[DEBUG] Adding user: %s to team: %s with role: %s", userID, teamID, role)
-
-	retryErr := resource.Retry(2*time.Minute, func() *resource.RetryError {
-		if _, err := client.Teams.AddUserWithRole(teamID, userID, role); err != nil {
-			if isErrCode(err, 500) {
-				return resource.RetryableError(err)
-			}
-
-			return resource.NonRetryableError(err)
-		}
-
-		return nil
-	})
-	if retryErr != nil {
-		return retryErr
-	}
-
-	d.SetId(fmt.Sprintf("%s:%s", userID, teamID))
-
-	return resourcePagerDutyTeamMembershipRead(d, meta)
-}
-
-func resourcePagerDutyTeamMembershipRead(d *schema.ResourceData, meta interface{}) error {
-	client := meta.(*pagerduty.Client)
-
+func fetchPagerDutyTeamMembership(d *schema.ResourceData, meta interface{}, errCallback func(error, *schema.ResourceData) error) error {
+	client, _ := meta.(*Config).Client()
 	userID, teamID := resourcePagerDutyTeamMembershipParseID(d.Id())
-
 	log.Printf("[DEBUG] Reading user: %s from team: %s", userID, teamID)
-
 	return resource.Retry(2*time.Minute, func() *resource.RetryError {
 		resp, _, err := client.Teams.GetMembers(teamID, &pagerduty.GetMembersOptions{})
 		if err != nil {
-			errResp := handleNotFoundError(err, d)
+			errResp := errCallback(err, d)
 			if errResp != nil {
 				time.Sleep(2 * time.Second)
 				return resource.RetryableError(errResp)
@@ -108,9 +77,41 @@ func resourcePagerDutyTeamMembershipRead(d *schema.ResourceData, meta interface{
 		return nil
 	})
 }
+func resourcePagerDutyTeamMembershipCreate(d *schema.ResourceData, meta interface{}) error {
+	client, _ := meta.(*Config).Client()
+
+	userID := d.Get("user_id").(string)
+	teamID := d.Get("team_id").(string)
+	role := d.Get("role").(string)
+
+	log.Printf("[DEBUG] Adding user: %s to team: %s with role: %s", userID, teamID, role)
+
+	retryErr := resource.Retry(2*time.Minute, func() *resource.RetryError {
+		if _, err := client.Teams.AddUserWithRole(teamID, userID, role); err != nil {
+			if isErrCode(err, 500) {
+				return resource.RetryableError(err)
+			}
+
+			return resource.NonRetryableError(err)
+		}
+
+		return nil
+	})
+	if retryErr != nil {
+		return retryErr
+	}
+
+	d.SetId(fmt.Sprintf("%s:%s", userID, teamID))
+
+	return fetchPagerDutyTeamMembership(d, meta, genError)
+}
+
+func resourcePagerDutyTeamMembershipRead(d *schema.ResourceData, meta interface{}) error {
+	return fetchPagerDutyTeamMembership(d, meta, handleNotFoundError)
+}
 
 func resourcePagerDutyTeamMembershipUpdate(d *schema.ResourceData, meta interface{}) error {
-	client := meta.(*pagerduty.Client)
+	client, _ := meta.(*Config).Client()
 
 	userID := d.Get("user_id").(string)
 	teamID := d.Get("team_id").(string)
@@ -140,7 +141,7 @@ func resourcePagerDutyTeamMembershipUpdate(d *schema.ResourceData, meta interfac
 }
 
 func resourcePagerDutyTeamMembershipDelete(d *schema.ResourceData, meta interface{}) error {
-	client := meta.(*pagerduty.Client)
+	client, _ := meta.(*Config).Client()
 
 	userID, teamID := resourcePagerDutyTeamMembershipParseID(d.Id())
 

@@ -121,32 +121,12 @@ func buildExtensionServiceNowStruct(d *schema.ResourceData) *pagerduty.Extension
 	return Extension
 }
 
-func resourcePagerDutyExtensionServiceNowCreate(d *schema.ResourceData, meta interface{}) error {
-	client := meta.(*pagerduty.Client)
-
-	extension := buildExtensionServiceNowStruct(d)
-
-	log.Printf("[INFO] Creating PagerDuty extension %s", extension.Name)
-
-	extension, _, err := client.Extensions.Create(extension)
-	if err != nil {
-		return err
-	}
-
-	d.SetId(extension.ID)
-
-	return resourcePagerDutyExtensionServiceNowRead(d, meta)
-}
-
-func resourcePagerDutyExtensionServiceNowRead(d *schema.ResourceData, meta interface{}) error {
-	client := meta.(*pagerduty.Client)
-
-	log.Printf("[INFO] Reading PagerDuty extension %s", d.Id())
-
+func fetchPagerDutyExtensionServiceNowCreate(d *schema.ResourceData, meta interface{}, errCallback func(error, *schema.ResourceData) error) error {
+	client, _ := meta.(*Config).Client()
 	return resource.Retry(2*time.Minute, func() *resource.RetryError {
 		extension, _, err := client.Extensions.Get(d.Id())
 		if err != nil {
-			errResp := handleNotFoundError(err, d)
+			errResp := errCallback(err, d)
 			if errResp != nil {
 				time.Sleep(2 * time.Second)
 				return resource.RetryableError(errResp)
@@ -178,8 +158,29 @@ func resourcePagerDutyExtensionServiceNowRead(d *schema.ResourceData, meta inter
 	})
 }
 
+func resourcePagerDutyExtensionServiceNowCreate(d *schema.ResourceData, meta interface{}) error {
+	client, _ := meta.(*Config).Client()
+
+	extension := buildExtensionServiceNowStruct(d)
+
+	log.Printf("[INFO] Creating PagerDuty extension %s", extension.Name)
+
+	extension, _, err := client.Extensions.Create(extension)
+	if err != nil {
+		return err
+	}
+
+	d.SetId(extension.ID)
+	return fetchPagerDutyExtensionServiceNowCreate(d, meta, genError)
+}
+
+func resourcePagerDutyExtensionServiceNowRead(d *schema.ResourceData, meta interface{}) error {
+	log.Printf("[INFO] Reading PagerDuty extension %s", d.Id())
+	return fetchPagerDutyExtensionServiceNowCreate(d, meta, handleNotFoundError)
+}
+
 func resourcePagerDutyExtensionServiceNowUpdate(d *schema.ResourceData, meta interface{}) error {
-	client := meta.(*pagerduty.Client)
+	client, _ := meta.(*Config).Client()
 
 	extension := buildExtensionServiceNowStruct(d)
 
@@ -193,7 +194,7 @@ func resourcePagerDutyExtensionServiceNowUpdate(d *schema.ResourceData, meta int
 }
 
 func resourcePagerDutyExtensionServiceNowDelete(d *schema.ResourceData, meta interface{}) error {
-	client := meta.(*pagerduty.Client)
+	client, _ := meta.(*Config).Client()
 
 	log.Printf("[INFO] Deleting PagerDuty extension %s", d.Id())
 
@@ -211,7 +212,7 @@ func resourcePagerDutyExtensionServiceNowDelete(d *schema.ResourceData, meta int
 }
 
 func resourcePagerDutyExtensionServiceNowImport(d *schema.ResourceData, meta interface{}) ([]*schema.ResourceData, error) {
-	client := meta.(*pagerduty.Client)
+	client, _ := meta.(*Config).Client()
 
 	extension, _, err := client.Extensions.Get(d.Id())
 

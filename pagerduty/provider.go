@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"runtime"
+	"strings"
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
 	"github.com/heimweh/go-pagerduty/pagerduty"
@@ -24,6 +25,24 @@ func Provider() *schema.Provider {
 				Required:    true,
 				DefaultFunc: schema.EnvDefaultFunc("PAGERDUTY_TOKEN", nil),
 			},
+
+			"user_token": {
+				Type:        schema.TypeString,
+				Optional:    true,
+				DefaultFunc: schema.EnvDefaultFunc("PAGERDUTY_USER_TOKEN", nil),
+			},
+
+			"service_region": {
+				Type:     schema.TypeString,
+				Optional: true,
+				Default:  "",
+			},
+
+			"api_url_override": {
+				Type:     schema.TypeString,
+				Optional: true,
+				Default:  "",
+			},
 		},
 
 		DataSourcesMap: map[string]*schema.Resource{
@@ -43,29 +62,31 @@ func Provider() *schema.Provider {
 		},
 
 		ResourcesMap: map[string]*schema.Resource{
-			"pagerduty_addon":                  resourcePagerDutyAddon(),
-			"pagerduty_escalation_policy":      resourcePagerDutyEscalationPolicy(),
-			"pagerduty_maintenance_window":     resourcePagerDutyMaintenanceWindow(),
-			"pagerduty_schedule":               resourcePagerDutySchedule(),
-			"pagerduty_service":                resourcePagerDutyService(),
-			"pagerduty_service_integration":    resourcePagerDutyServiceIntegration(),
-			"pagerduty_team":                   resourcePagerDutyTeam(),
-			"pagerduty_team_membership":        resourcePagerDutyTeamMembership(),
-			"pagerduty_user":                   resourcePagerDutyUser(),
-			"pagerduty_user_contact_method":    resourcePagerDutyUserContactMethod(),
-			"pagerduty_user_notification_rule": resourcePagerDutyUserNotificationRule(),
-			"pagerduty_extension":              resourcePagerDutyExtension(),
-			"pagerduty_extension_servicenow":   resourcePagerDutyExtensionServiceNow(),
-			"pagerduty_event_rule":             resourcePagerDutyEventRule(),
-			"pagerduty_ruleset":                resourcePagerDutyRuleset(),
-			"pagerduty_ruleset_rule":           resourcePagerDutyRulesetRule(),
-			"pagerduty_business_service":       resourcePagerDutyBusinessService(),
-			"pagerduty_service_dependency":     resourcePagerDutyServiceDependency(),
-			"pagerduty_response_play":          resourcePagerDutyResponsePlay(),
-			"pagerduty_tag":                    resourcePagerDutyTag(),
-			"pagerduty_tag_assignment":         resourcePagerDutyTagAssignment(),
-			"pagerduty_service_event_rule":     resourcePagerDutyServiceEventRule(),
-			"pagerduty_slack_connection":       resourcePagerDutySlackConnection(),
+			"pagerduty_addon":                       resourcePagerDutyAddon(),
+			"pagerduty_escalation_policy":           resourcePagerDutyEscalationPolicy(),
+			"pagerduty_maintenance_window":          resourcePagerDutyMaintenanceWindow(),
+			"pagerduty_schedule":                    resourcePagerDutySchedule(),
+			"pagerduty_service":                     resourcePagerDutyService(),
+			"pagerduty_service_integration":         resourcePagerDutyServiceIntegration(),
+			"pagerduty_team":                        resourcePagerDutyTeam(),
+			"pagerduty_team_membership":             resourcePagerDutyTeamMembership(),
+			"pagerduty_user":                        resourcePagerDutyUser(),
+			"pagerduty_user_contact_method":         resourcePagerDutyUserContactMethod(),
+			"pagerduty_user_notification_rule":      resourcePagerDutyUserNotificationRule(),
+			"pagerduty_extension":                   resourcePagerDutyExtension(),
+			"pagerduty_extension_servicenow":        resourcePagerDutyExtensionServiceNow(),
+			"pagerduty_event_rule":                  resourcePagerDutyEventRule(),
+			"pagerduty_ruleset":                     resourcePagerDutyRuleset(),
+			"pagerduty_ruleset_rule":                resourcePagerDutyRulesetRule(),
+			"pagerduty_business_service":            resourcePagerDutyBusinessService(),
+			"pagerduty_service_dependency":          resourcePagerDutyServiceDependency(),
+			"pagerduty_response_play":               resourcePagerDutyResponsePlay(),
+			"pagerduty_tag":                         resourcePagerDutyTag(),
+			"pagerduty_tag_assignment":              resourcePagerDutyTagAssignment(),
+			"pagerduty_service_event_rule":          resourcePagerDutyServiceEventRule(),
+			"pagerduty_slack_connection":            resourcePagerDutySlackConnection(),
+			"pagerduty_business_service_subscriber": resourcePagerDutyBusinessServiceSubscriber(),
+			"pagerduty_webhook_subscription":        resourcePagerDutyWebhookSubscription(),
 		},
 	}
 
@@ -90,23 +111,38 @@ func isErrCode(err error, code int) bool {
 	return false
 }
 
+func genError(err error, d *schema.ResourceData) error {
+	return fmt.Errorf("Error reading: %s: %s", d.Id(), err)
+}
+
 func handleNotFoundError(err error, d *schema.ResourceData) error {
 	if isErrCode(err, 404) {
 		log.Printf("[WARN] Removing %s because it's gone", d.Id())
 		d.SetId("")
 		return nil
 	}
-
-	return fmt.Errorf("Error reading: %s: %s", d.Id(), err)
+	return genError(err, d)
 }
 
 func providerConfigure(data *schema.ResourceData, terraformVersion string) (interface{}, error) {
+	var ServiceRegion = strings.ToLower(data.Get("service_region").(string))
+
+	if ServiceRegion == "us" || ServiceRegion == "" {
+		ServiceRegion = ""
+	} else {
+		ServiceRegion = ServiceRegion + "."
+	}
+
 	config := Config{
+		ApiUrl:              "https://api." + ServiceRegion + "pagerduty.com",
+		AppUrl:              "https://app." + ServiceRegion + "pagerduty.com",
 		SkipCredsValidation: data.Get("skip_credentials_validation").(bool),
 		Token:               data.Get("token").(string),
+		UserToken:           data.Get("user_token").(string),
 		UserAgent:           fmt.Sprintf("(%s %s) Terraform/%s", runtime.GOOS, runtime.GOARCH, terraformVersion),
+		ApiUrlOverride:      data.Get("api_url_override").(string),
 	}
 
 	log.Println("[INFO] Initializing PagerDuty client")
-	return config.Client()
+	return &config, nil
 }
